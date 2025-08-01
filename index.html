@@ -1,0 +1,619 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>聊天应用程序</title>
+    <!-- 引入 Tailwind CSS 以便快速美化界面 -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <style>
+        /* 引入 Inter 字体 */
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap');
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+
+        /* 自定义 emoji 面板的滚动条 */
+        .emoji-grid::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        .emoji-grid::-webkit-scrollbar-track {
+            background: #f1f1f1;
+            border-radius: 10px;
+        }
+
+        .emoji-grid::-webkit-scrollbar-thumb {
+            background: #888;
+            border-radius: 10px;
+        }
+
+        .emoji-grid::-webkit-scrollbar-thumb:hover {
+            background: #555;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 flex items-center justify-center min-h-screen p-4">
+
+    <!-- 这是应用程序的根容器 -->
+    <div class="bg-white rounded-lg shadow-xl w-full max-w-4xl h-[90vh] flex">
+        <!-- 左侧用户列表 -->
+        <div class="w-1/4 bg-gray-50 border-r border-gray-200 p-4 flex flex-col rounded-l-lg">
+            <h2 class="text-lg font-bold mb-4 text-center">用户列表</h2>
+            <div id="user-list" class="flex-1 overflow-y-auto space-y-2">
+                <!-- 用户列表会在这里动态添加 -->
+                <div id="loading-users" class="text-center text-gray-400">加载用户中...</div>
+            </div>
+        </div>
+
+        <!-- 右侧聊天区域 -->
+        <div class="w-3/4 flex flex-col">
+            <!-- 聊天窗口头部 -->
+            <div class="bg-blue-600 text-white p-4 text-center shadow-md rounded-tr-lg flex items-center justify-between">
+                <button id="return-button" class="hidden text-white font-semibold py-1 px-3 rounded-lg hover:bg-blue-700 transition-colors duration-200">
+                    返回
+                </button>
+                <h1 id="app-title" class="text-xl font-bold flex-1">公开聊天</h1>
+                <div class="w-16"></div> <!-- 占位符以保持标题居中 -->
+            </div>
+
+            <!-- 消息区域 -->
+            <div id="chat-box" class="flex-1 overflow-y-auto p-4 flex flex-col space-y-4 relative">
+                <!-- 消息会在这里动态添加 -->
+                <div id="loading-state" class="absolute inset-0 flex items-center justify-center text-gray-500 text-lg">
+                    正在加载中...
+                </div>
+                <div id="error-state" class="absolute inset-0 flex items-center justify-center text-red-500 text-lg p-4 bg-red-100 rounded-lg hidden">
+                    <span id="error-message"></span>
+                </div>
+            </div>
+
+            <!-- 输入和发送区域 -->
+            <div class="p-4 bg-gray-50 border-t border-gray-200 rounded-br-lg relative">
+                <!-- 表情选择器面板 -->
+                <div id="emoji-picker" class="absolute bottom-full left-0 mb-2 w-full max-h-64 bg-white rounded-lg shadow-xl p-2 border border-gray-200 hidden overflow-y-auto emoji-grid">
+                    <div class="grid grid-cols-8 sm:grid-cols-10 md:grid-cols-12 gap-1">
+                        <!-- 表情会在这里通过 JS 动态添加 -->
+                    </div>
+                </div>
+
+                <!-- 回复预览框 -->
+                <div id="reply-preview" class="p-2 bg-gray-200 rounded-lg mb-2 hidden flex items-center justify-between">
+                    <div>
+                        <span class="text-xs font-semibold text-gray-700">正在回复: <span id="reply-to-username"></span></span>
+                        <p id="reply-to-text" class="text-sm text-gray-500 truncate"></p>
+                    </div>
+                    <button id="clear-reply" class="text-gray-500 hover:text-gray-700 transition-colors duration-200">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                    </button>
+                </div>
+                <form id="message-form" class="flex space-x-2 items-center">
+                    <input
+                        id="message-input"
+                        type="text"
+                        class="flex-1 p-3 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 transition duration-200"
+                        placeholder="输入消息..."
+                    />
+                    <!-- 表情按钮 -->
+                    <button
+                        id="emoji-button"
+                        type="button"
+                        class="px-3 py-3 bg-gray-200 text-gray-700 font-semibold rounded-lg shadow-md hover:bg-gray-300 transition duration-200 ease-in-out"
+                    >
+                        😊
+                    </button>
+                    <button
+                        id="send-button"
+                        type="submit"
+                        class="px-6 py-3 bg-blue-500 text-white font-semibold rounded-lg shadow-md hover:bg-blue-600 transition duration-200 ease-in-out"
+                    >
+                        发送
+                    </button>
+                    <button
+                        id="check-in-button"
+                        type="button"
+                        class="px-6 py-3 bg-green-500 text-white font-semibold rounded-lg shadow-md hover:bg-green-600 transition duration-200 ease-in-out"
+                    >
+                        签到
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- 用户名输入模态框 -->
+    <div id="username-modal" class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full flex items-center justify-center">
+        <div class="bg-white p-8 rounded-lg shadow-xl max-w-sm w-full">
+            <h2 class="text-2xl font-bold mb-4 text-center">请输入您的名字</h2>
+            <form id="username-form">
+                <input 
+                    id="username-input" 
+                    type="text" 
+                    class="w-full p-3 mb-4 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" 
+                    placeholder="您的名字..." 
+                    required
+                />
+                <button 
+                    type="submit" 
+                    class="w-full px-4 py-3 bg-blue-500 text-white font-semibold rounded-lg shadow-md hover:bg-blue-600 transition duration-200"
+                >
+                    开始聊天
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-auth.js";
+        import { getFirestore, collection, addDoc, onSnapshot, serverTimestamp, query, orderBy, doc, setDoc, getDocs, deleteDoc, updateDoc } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore.js";
+        
+        document.addEventListener('DOMContentLoaded', async () => {
+            // Firebase configuration
+            const firebaseConfig = {
+              "apiKey": "AIzaSyDdNCBA0XdU6EPRuL68sdL-dkwcjjN0Y_Q",
+              "authDomain": "lishi-1321f.firebaseapp.com",
+              "projectId": "lishi-1321f",
+              "storageBucket": "lishi-1321f.appspot.com",
+              "messagingSenderId": "54392732964",
+              "appId": "1:54392732964:web:0c702dae6850d1aa1147b1"
+            };
+            
+            // 获取DOM元素
+            const form = document.getElementById('message-form');
+            const input = document.getElementById('message-input');
+            const chatBox = document.getElementById('chat-box');
+            const loadingState = document.getElementById('loading-state');
+            const errorState = document.getElementById('error-state');
+            const errorMessageSpan = document.getElementById('error-message');
+            const usernameModal = document.getElementById('username-modal');
+            const usernameForm = document.getElementById('username-form');
+            const usernameInput = document.getElementById('username-input');
+            const checkInButton = document.getElementById('check-in-button');
+            const userListContainer = document.getElementById('user-list');
+            const appTitle = document.getElementById('app-title');
+            const returnButton = document.getElementById('return-button');
+            const replyPreview = document.getElementById('reply-preview');
+            const replyToUsernameSpan = document.getElementById('reply-to-username');
+            const replyToTextP = document.getElementById('reply-to-text');
+            const clearReplyButton = document.getElementById('clear-reply');
+            const emojiButton = document.getElementById('emoji-button');
+            const emojiPicker = document.getElementById('emoji-picker');
+            const emojiGrid = emojiPicker.querySelector('.grid');
+
+
+            let db;
+            let auth;
+            let currentUserId = null;
+            let currentUsername = null;
+            let currentChatPartnerId = null;
+            let unsubscribeFromMessages = null;
+            let replyingToMessage = null; // 用于存储回复的消息
+
+            const privateChatListeners = {}; // 存储私聊监听器以便管理
+            
+            // 常用 emoji 列表
+            const emojis = ['😊', '😂', '😍', '👍', '❤️', '🎉', '👏', '🔥', '🚀', '🌟', '🤣', '😭', '🤔', '🙏', '💯', '👋', '🥳', '😎', '🤩', '😘', '😋', '😜', '😇', '🤫', '😬', '🤯', '😱', '😨', '😳', '🥺', '👉', '👈', '👆', '👇', '👌', '✌️', '💪', '🙏', '🤝', '🙌', '👀', '�', '🐶', '🐱', '🐭', '🐹', '🐰', '🦊', '🐻', '🐼', '🐨', '🐯', '🦁', '🐮', '🐷', '🐸', '🐒', '🐔', '🐧', '🐦', '🦉', '🦆', '🦅', '🐴', '🐗', '🐺', '🦄', '🐝', '🐛', '🦋', '🐌', '🐞', '🐠', '🐬', '🐳', '🦈', '🐟', '🐙', '🦀', '🦞', '🦐', '🦑', '🐡', '🦠', '🌲', '🌳', '🌴', '🌵', '🌷', '🌸', '🌹', '🌻', '🌼', '🍁', '🍀', '🍓', '🍇', '🍉', '🍊', '🍋', '🍌', '🍍', '🍎', '🍏', '🍐', '🍑', '🍒', '🥝', '🍅', '🍆', '🥑', '🥦', '🌶️', '🌽', '🥕', '🥔', '🍠', '🥐', '🍞', '🥖', '🥨', '🧀', '🍔', '🍟', '🍕', '🌮', '🌯', '🥙', '🍣', '🍱', '🍜', '🍝', '🍛', '🍲', '🍜', '🥟', '🍤', '🍙', '🍚', '🍘', '🍡', '🍢', '🍧', '🍨', '🍦', '🍩', '🍪', '🎂', '🍰', '🍫', '🍬', '🍭', '🍮', '☕', '🍵', '🍶', '🍾', '🍷', '🍸', '🍹', '🍺', '🍻', '🥂', '🥃', '🥤', '🧊', '🍽️', '🥄', '🥢', '🍴', '🔪', '🏺', '⚽', '🏀', '🏈', '⚾', '🥎', '🏐', '🏉', '🎱', '🏓', '🏸', '🏒', '🥅', '⛳', '🎯', '🏹', '🎣', '🤿', '🥊', '🥋', '🛹', '🛼', '🛷', '⛸️', '🎿', '🏂', '🪂', '🧗', '🚵', '🚴', '🤸', '⛹️', '🤺', '🏋️', '🤼', '🤸', '🧘', '🚶', '🏃', '🧎', '🧍', '🕺', '💃', '👯', '👯‍♂️', '🕴️', '👤', '👥'];
+
+            // 动态生成 emoji 面板
+            emojis.forEach(emoji => {
+                const emojiSpan = document.createElement('span');
+                emojiSpan.textContent = emoji;
+                emojiSpan.className = 'text-xl cursor-pointer hover:bg-gray-100 rounded-md p-1 transition duration-150';
+                emojiSpan.addEventListener('click', () => {
+                    input.value += emoji;
+                    input.focus();
+                    emojiPicker.classList.add('hidden'); // 点击后隐藏面板
+                });
+                emojiGrid.appendChild(emojiSpan);
+            });
+            
+            // 表情按钮事件监听器
+            emojiButton.addEventListener('click', () => {
+                emojiPicker.classList.toggle('hidden');
+            });
+
+            // 获取用户名的首字母（或第一个汉字）
+            function getAvatarText(username) {
+                return username ? username.charAt(0).toUpperCase() : '?';
+            }
+
+            // 显示回复预览框
+            function showReplyPreview(message) {
+                replyingToMessage = { id: message.id, userId: message.userId, username: message.username, text: message.text };
+                replyToUsernameSpan.textContent = message.username;
+                replyToTextP.textContent = message.text.length > 50 ? message.text.substring(0, 47) + '...' : message.text;
+                replyPreview.classList.remove('hidden');
+            }
+
+            // 清除回复预览框
+            function clearReplyPreview() {
+                replyingToMessage = null;
+                replyPreview.classList.add('hidden');
+            }
+            
+            // 为清除回复按钮添加事件监听器
+            clearReplyButton.addEventListener('click', clearReplyPreview);
+            
+            try {
+                const app = initializeApp(firebaseConfig);
+                db = getFirestore(app);
+                auth = getAuth(app);
+
+                auth.onAuthStateChanged(user => {
+                    if (user) {
+                        currentUserId = user.uid;
+                        const savedUsername = localStorage.getItem('chatUsername');
+                        if (savedUsername) {
+                            currentUsername = savedUsername;
+                            usernameModal.classList.add('hidden');
+                            updateUserPresence(currentUserId, currentUsername);
+                            
+                            // 在用户登录后立即运行清理程序
+                            cleanupInactiveUsers();
+
+                            enterPublicChat();
+                            listenForUsers();
+                        } else {
+                            usernameModal.classList.remove('hidden');
+                        }
+                    } else {
+                        signInAnonymously(auth).then(() => {
+                        }).catch(error => {
+                            console.error("Error signing in anonymously: ", error);
+                            displayError(`匿名登录失败: ${error.message}`);
+                        });
+                    }
+                });
+
+            } catch (error) {
+                displayError(`初始化失败: ${error.message}`);
+                console.error("Critical error during app initialization: ", error);
+            }
+            
+            usernameForm.addEventListener('submit', (e) => {
+                e.preventDefault();
+                const newUsername = usernameInput.value.trim();
+                if (newUsername) {
+                    currentUsername = newUsername;
+                    localStorage.setItem('chatUsername', currentUsername);
+                    usernameModal.classList.add('hidden');
+                    updateUserPresence(currentUserId, currentUsername);
+                    enterPublicChat();
+                    listenForUsers();
+                }
+            });
+
+            checkInButton.addEventListener('click', async () => {
+                const messagesCollection = currentChatPartnerId ? collection(db, 'chats', [currentUserId, currentChatPartnerId].sort().join('_'), 'messages') : collection(db, 'messages');
+                
+                try {
+                    await addDoc(messagesCollection, {
+                        type: 'check-in',
+                        timestamp: serverTimestamp(),
+                        userId: currentUserId,
+                        username: currentUsername,
+                    });
+                    // 更新当前用户的活跃时间戳
+                    updateUserPresence(currentUserId, currentUsername);
+                } catch (e) {
+                    console.error("Error adding check-in document: ", e);
+                    displayError("发送签到失败，请检查您的网络连接。");
+                }
+            });
+            
+            returnButton.addEventListener('click', () => {
+                enterPublicChat();
+            });
+
+            // 更新或设置用户的存在和活跃时间戳
+            async function updateUserPresence(userId, username) {
+                try {
+                    const userRef = doc(db, "users", userId);
+                    await setDoc(userRef, {
+                        username: username,
+                        // 使用服务器时间戳，确保排序正确
+                        timestamp: serverTimestamp() 
+                    }, { merge: true }); // 使用 merge:true 确保只更新 timestamp
+                } catch (e) {
+                    console.error("Error updating user presence: ", e);
+                }
+            }
+
+            // 新增的自动清理函数
+            async function cleanupInactiveUsers() {
+                try {
+                    const usersCollection = collection(db, 'users');
+                    const usersSnapshot = await getDocs(usersCollection);
+                    const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000); // 1小时前的时间戳
+            
+                    usersSnapshot.forEach(async (userDoc) => {
+                        const userData = userDoc.data();
+                        // 确保 timestamp 存在且是有效的时间戳
+                        if (userData.timestamp && userData.timestamp.toDate() < oneHourAgo) {
+                            console.log(`Deleting inactive user: ${userDoc.id}`);
+                            await deleteDoc(doc(db, 'users', userDoc.id));
+                        }
+                    });
+                } catch (e) {
+                    console.error("Error cleaning up inactive users: ", e);
+                }
+            }
+
+            // 监听用户列表，并处理私聊点击事件
+            function listenForUsers() {
+                // 增加 orderBy('timestamp', 'desc') 以确保用户列表按最新活跃时间排序
+                const usersCollection = collection(db, 'users');
+                const q = query(usersCollection, orderBy('timestamp', 'desc'));
+                onSnapshot(q, (snapshot) => {
+                    userListContainer.innerHTML = '';
+                    snapshot.forEach(doc => {
+                        const user = doc.data();
+                        const userId = doc.id;
+                        if (userId !== currentUserId) {
+                            const userElement = document.createElement('div');
+                            const avatarText = getAvatarText(user.username);
+                            
+                            userElement.id = `user-${userId}`; // 为每个用户元素添加一个唯一的ID
+                            userElement.className = 'p-2 rounded-lg hover:bg-gray-200 cursor-pointer transition duration-150 flex items-center space-x-2 relative';
+                            userElement.innerHTML = `
+                                <div class="w-8 h-8 rounded-lg flex-shrink-0 flex items-center justify-center bg-gray-300 text-gray-800 font-bold">
+                                    ${avatarText}
+                                </div>
+                                <span>${user.username}</span>
+                                <div id="notification-${userId}" class="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full hidden"></div>
+                            `;
+                            userElement.addEventListener('click', () => {
+                                startPrivateChat(userId, user.username);
+                            });
+                            userListContainer.appendChild(userElement);
+
+                            // 为每个其他用户设置私聊消息监听器
+                            setupPrivateChatListener(userId);
+                        }
+                    });
+                    if (snapshot.empty) {
+                        userListContainer.innerHTML = '<div class="text-center text-gray-400">目前没有其他用户在线</div>';
+                    }
+                });
+            }
+
+            // 新增：设置私聊消息监听器
+            function setupPrivateChatListener(partnerId) {
+                // 如果已经有监听器，先取消
+                if (privateChatListeners[partnerId]) {
+                    privateChatListeners[partnerId]();
+                }
+
+                const chatDocId = [currentUserId, partnerId].sort().join('_');
+                const privateMessagesCollection = collection(db, 'chats', chatDocId, 'messages');
+                const q = query(privateMessagesCollection, orderBy('timestamp'));
+
+                // 设置新的监听器
+                privateChatListeners[partnerId] = onSnapshot(q, (querySnapshot) => {
+                    const notificationBadge = document.getElementById(`notification-${partnerId}`);
+                    if (!querySnapshot.empty && notificationBadge) {
+                        const lastMessage = querySnapshot.docs[querySnapshot.docs.length - 1].data();
+                        // 检查最后一条消息是否来自对方，并且当前不在与该用户的聊天界面
+                        if (lastMessage.userId !== currentUserId && currentChatPartnerId !== partnerId) {
+                            notificationBadge.classList.remove('hidden');
+                            // 当收到新私信时，更新私信发送者的活跃时间戳，使其排序到顶部
+                            updateUserPresence(lastMessage.userId, lastMessage.username);
+                        }
+                    }
+                }, (error) => {
+                    console.error(`Error listening to private chat with ${partnerId}: `, error);
+                });
+            }
+            
+            function enterPublicChat() {
+                if (unsubscribeFromMessages) {
+                    unsubscribeFromMessages();
+                }
+                currentChatPartnerId = null;
+                appTitle.textContent = '公开聊天';
+                returnButton.classList.add('hidden');
+                appTitle.classList.add('text-center');
+                clearReplyPreview(); // 切换到公开聊天时清除回复状态
+                initializeChat(collection(db, 'messages'));
+            }
+
+            function startPrivateChat(partnerId, partnerUsername) {
+                if (unsubscribeFromMessages) {
+                    unsubscribeFromMessages();
+                }
+                currentChatPartnerId = partnerId;
+                appTitle.textContent = partnerUsername;
+                returnButton.classList.remove('hidden');
+                appTitle.classList.remove('text-center');
+                clearReplyPreview(); // 切换到私聊时清除回复状态
+                
+                // 清除私聊通知
+                const notificationBadge = document.getElementById(`notification-${partnerId}`);
+                if (notificationBadge) {
+                    notificationBadge.classList.add('hidden');
+                }
+
+                const chatDocId = [currentUserId, partnerId].sort().join('_');
+                const privateMessagesCollection = collection(db, 'chats', chatDocId, 'messages');
+                initializeChat(privateMessagesCollection);
+            }
+
+            function initializeChat(messagesCollection) {
+                // 清理并重新绑定表单提交事件，以确保其正确指向当前聊天
+                form.onsubmit = async (e) => {
+                    e.preventDefault();
+                    const messageText = input.value.trim();
+            
+                    if (messageText && currentUserId && currentUsername) {
+                        const messageData = {
+                            type: 'text',
+                            text: messageText,
+                            timestamp: serverTimestamp(),
+                            userId: currentUserId,
+                            username: currentUsername,
+                        };
+
+                        // 如果正在回复消息，添加回复信息
+                        if (replyingToMessage) {
+                            messageData.replyTo = {
+                                userId: replyingToMessage.userId,
+                                username: replyingToMessage.username,
+                                text: replyingToMessage.text
+                            };
+                        }
+
+                        try {
+                            await addDoc(messagesCollection, messageData);
+                            input.value = '';
+                            clearReplyPreview(); // 发送后清除回复状态
+                            
+                            // 更新当前用户的活跃时间戳
+                            updateUserPresence(currentUserId, currentUsername);
+                            // 如果是私聊，也更新聊天对象的活跃时间戳
+                            if (currentChatPartnerId) {
+                                updateUserPresence(currentChatPartnerId, appTitle.textContent);
+                            }
+
+                        } catch (e) {
+                            console.error("Error adding document: ", e);
+                            displayError("发送消息失败，请检查您的网络连接。");
+                        }
+                    }
+                    // 发送后隐藏 emoji 面板
+                    emojiPicker.classList.add('hidden');
+                };
+
+                chatBox.innerHTML = '';
+                loadingState.classList.remove('hidden');
+            
+                const q = query(messagesCollection, orderBy('timestamp'));
+                unsubscribeFromMessages = onSnapshot(q, (querySnapshot) => {
+                    loadingState.classList.add('hidden');
+                    chatBox.innerHTML = '';
+                    querySnapshot.forEach((doc) => {
+                        const message = { id: doc.id, ...doc.data() };
+                        const isMyMessage = message.userId === currentUserId;
+                        const avatarText = getAvatarText(message.username);
+                        
+                        let messageElement = document.createElement('div');
+                        
+                        // 引用回复的消息渲染逻辑
+                        let replyHtml = '';
+                        if (message.replyTo) {
+                            replyHtml = `
+                                <div class="bg-gray-300 p-2 rounded-md mb-2 border-l-4 border-blue-500">
+                                    <span class="text-sm font-semibold text-blue-700">${message.replyTo.username}</span>
+                                    <p class="text-xs text-gray-600 truncate">${message.replyTo.text}</p>
+                                </div>
+                            `;
+                        }
+
+                        if (isMyMessage) {
+                            // 我发送的消息：只显示消息气泡，居右对齐
+                            messageElement.className = 'flex flex-col max-w-[80%] self-end';
+                            if (message.type === 'check-in') {
+                                messageElement.innerHTML = `
+                                    <div class="bg-white p-4 rounded-lg shadow-md border">
+                                        <p class="text-sm font-semibold text-right">${message.username}</p>
+                                        <div class="bg-gray-100 p-2 mt-1 rounded-lg">
+                                            <p class="text-gray-800 text-sm">签到</p>
+                                        </div>
+                                        <span class="text-xs text-gray-400 mt-1 block text-right">
+                                            ${message.timestamp ? new Date(message.timestamp.toDate()).toLocaleTimeString() : '...'}
+                                        </span>
+                                    </div>
+                                `;
+                            } else {
+                                messageElement.innerHTML = `
+                                    <div class="p-3 rounded-xl shadow-md border max-w-full bg-blue-500 text-white cursor-pointer" onclick="showReplyPreview(${JSON.stringify(message).replace(/"/g, '&quot;')})">
+                                        <div class="text-sm font-semibold mb-1">
+                                            ${message.username}
+                                        </div>
+                                        ${replyHtml}
+                                        <p class="break-words">${message.text}</p>
+                                        <span class="text-xs text-gray-200 mt-1 block text-right">
+                                            ${message.timestamp ? new Date(message.timestamp.toDate()).toLocaleTimeString() : '...'}
+                                        </span>
+                                    </div>
+                                `;
+                            }
+                        } else {
+                            // 其他人发送的消息：显示头像和消息气泡，居左对齐
+                            messageElement.className = 'flex items-start space-x-2 max-w-[80%]';
+
+                            // 创建一个可点击的区域，用于触发私信
+                            const avatarAndNameContainer = document.createElement('div');
+                            avatarAndNameContainer.className = 'flex flex-col items-center space-y-1 cursor-pointer flex-shrink-0';
+                            // 阻止事件冒泡，防止点击头像时同时触发消息的回复功能
+                            avatarAndNameContainer.addEventListener('click', (e) => {
+                                e.stopPropagation();
+                                startPrivateChat(message.userId, message.username);
+                            });
+
+                            const avatarDiv = document.createElement('div');
+                            avatarDiv.className = 'w-8 h-8 rounded-lg flex items-center justify-center bg-gray-300 text-gray-800 font-bold';
+                            avatarDiv.textContent = avatarText;
+
+                            const nameSpan = document.createElement('span');
+                            nameSpan.className = 'text-xs font-semibold text-gray-700 mt-1';
+                            nameSpan.textContent = message.username || '匿名用户';
+
+                            avatarAndNameContainer.appendChild(avatarDiv);
+                            avatarAndNameContainer.appendChild(nameSpan);
+                            
+                            messageElement.appendChild(avatarAndNameContainer);
+                            
+                            // 消息主体部分
+                            const messageBody = document.createElement('div');
+
+                            if (message.type === 'check-in') {
+                                messageBody.className = 'bg-white p-4 rounded-lg shadow-md border flex-1';
+                                messageBody.innerHTML = `
+                                    <p class="text-sm font-semibold">${message.username}</p>
+                                    <div class="bg-gray-100 p-2 mt-1 rounded-lg">
+                                        <p class="text-gray-800 text-sm">签到</p>
+                                    </div>
+                                    <span class="text-xs text-gray-400 mt-1 block">
+                                        ${message.timestamp ? new Date(message.timestamp.toDate()).toLocaleTimeString() : '...'}
+                                    </span>
+                                `;
+                            } else {
+                                messageBody.className = 'p-3 rounded-xl shadow-md border max-w-full bg-gray-200 text-gray-800 flex-1 cursor-pointer';
+                                messageBody.innerHTML = `
+                                    ${replyHtml}
+                                    <p class="break-words">${message.text}</p>
+                                    <span class="text-xs text-gray-500 mt-1 block">
+                                        ${message.timestamp ? new Date(message.timestamp.toDate()).toLocaleTimeString() : '...'}
+                                    </span>
+                                `;
+                                // 为消息气泡本身添加回复事件
+                                messageBody.addEventListener('click', () => {
+                                    showReplyPreview(message);
+                                });
+                            }
+                            messageElement.appendChild(messageBody);
+                        }
+                        
+                        chatBox.appendChild(messageElement);
+                    });
+                    chatBox.scrollTop = chatBox.scrollHeight;
+                }, (error) => {
+                    console.error("Error listening to messages: ", error);
+                    displayError(`加载消息失败：${error.message}`);
+                });
+            }
+
+            function displayError(message) {
+                loadingState.classList.add('hidden');
+                errorState.classList.remove('hidden');
+                errorMessageSpan.textContent = `发生了错误：${message}`;
+            }
+        });
+    </script>
+</body>
+</html>
+�
